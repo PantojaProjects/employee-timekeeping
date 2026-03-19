@@ -1,73 +1,461 @@
-const SHEET_NAME = "Sheet1";
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Employee Timekeeping System</title>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-function doPost(e) {
-  const lock = LockService.getScriptLock();
-  lock.tryLock(10000);
-  try {
-    const ss = SpreadsheetApp.getActiveSpreadsheet();
-    const sheet = ss.getSheetByName(SHEET_NAME);
-    const data = JSON.parse(e.postData.contents);
-    const { employeeId, type, date, time } = data;
+    body {
+      font-family: 'DM Sans', sans-serif;
+      background: #06090f;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1.5rem;
+    }
 
-    // Search for existing row for this employee today
-    const rows = sheet.getDataRange().getValues();
-    let found = false;
-    for (let i = 1; i < rows.length; i++) {
-      if (rows[i][0] === date && String(rows[i][1]) === String(employeeId)) {
-        if (type === "OUT") {
-          sheet.getRange(i + 1, 4).setValue(time); // Column D = Time Out
-        }
-        // Return existing row data
-        return ContentService
-          .createTextOutput(JSON.stringify({
-            success: true,
-            row: { date: rows[i][0], employeeId: rows[i][1], timeIn: rows[i][2], timeOut: sheet.getRange(i+1,4).getValue() }
-          }))
-          .setMimeType(ContentService.MimeType.JSON);
-        found = true;
-        break;
+    .wrap {
+      background: #0a0f1e;
+      border-radius: 20px;
+      border: 0.5px solid rgba(80,130,200,0.15);
+      padding: 2.5rem 2rem;
+      width: 100%;
+      max-width: 460px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      position: relative;
+      gap: 1.2rem;
+    }
+
+    .wrap::before {
+      content: '';
+      position: absolute;
+      top: -60px; left: 50%; transform: translateX(-50%);
+      width: 400px; height: 200px;
+      background: radial-gradient(ellipse, rgba(30,120,255,0.12) 0%, transparent 70%);
+      pointer-events: none;
+    }
+
+    .logo {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 4px;
+      color: #3a5a88;
+      text-transform: uppercase;
+    }
+
+    .headline {
+      font-size: 22px;
+      font-weight: 300;
+      color: #e0eeff;
+      letter-spacing: 1px;
+      text-align: center;
+    }
+
+    .clock-bar {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 13px;
+      color: #5a7aaa;
+      letter-spacing: 2px;
+      text-align: center;
+    }
+    .clock-bar span { color: #8ab4e0; }
+
+    .cfg-toggle {
+      position: absolute;
+      top: 16px; right: 16px;
+      background: rgba(255,255,255,0.04);
+      border: 0.5px solid rgba(80,130,200,0.2);
+      border-radius: 8px;
+      color: #3a5a88;
+      font-size: 18px;
+      width: 34px; height: 34px;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: color 0.2s;
+    }
+    .cfg-toggle:hover { color: #8ab4e0; }
+
+    .cfg-panel {
+      display: none;
+      width: 100%;
+      background: rgba(10,20,50,0.9);
+      border: 0.5px solid rgba(80,130,200,0.3);
+      border-radius: 12px;
+      padding: 1.2rem;
+    }
+    .cfg-panel.open { display: block; }
+
+    .cfg-label {
+      font-size: 11px;
+      letter-spacing: 2px;
+      color: #3a5a88;
+      text-transform: uppercase;
+      margin-bottom: 6px;
+      display: block;
+    }
+
+    .settings-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .settings-input {
+      flex: 1;
+      background: rgba(255,255,255,0.04);
+      border: 0.5px solid rgba(80,130,200,0.3);
+      border-radius: 8px;
+      padding: 9px 14px;
+      font-size: 13px;
+      color: #c0d8f5;
+      font-family: 'Share Tech Mono', monospace;
+      letter-spacing: 1px;
+      outline: none;
+    }
+    .settings-input::placeholder { color: #3a5a88; font-size: 11px; }
+    .settings-input:focus { border-color: rgba(80,130,200,0.7); }
+
+    .save-btn {
+      background: rgba(30,80,160,0.3);
+      border: 0.5px solid rgba(80,130,200,0.4);
+      border-radius: 8px;
+      color: #8ab4e0;
+      font-size: 12px;
+      padding: 9px 14px;
+      cursor: pointer;
+      white-space: nowrap;
+      font-family: 'DM Sans', sans-serif;
+      transition: background 0.2s;
+    }
+    .save-btn:hover { background: rgba(30,80,160,0.5); }
+
+    .cfg-hint {
+      font-size: 11px;
+      color: #3a5a88;
+      margin-top: 8px;
+      line-height: 1.6;
+    }
+
+    .card {
+      background: rgba(255,255,255,0.03);
+      border: 0.5px solid rgba(80,130,200,0.2);
+      border-radius: 16px;
+      padding: 2rem 2rem;
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 1.4rem;
+    }
+
+    .id-label {
+      font-size: 11px;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      color: #3a5a88;
+      align-self: flex-start;
+    }
+
+    .id-input {
+      width: 100%;
+      background: rgba(255,255,255,0.05);
+      border: 0.5px solid rgba(80,130,200,0.35);
+      border-radius: 10px;
+      padding: 14px 18px;
+      font-size: 28px;
+      font-family: 'Share Tech Mono', monospace;
+      color: #d0e8ff;
+      letter-spacing: 6px;
+      text-align: center;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .id-input:focus { border-color: rgba(80,130,200,0.7); }
+    .id-input::placeholder { font-size: 16px; letter-spacing: 2px; color: #2a3a55; }
+
+    .btn-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+      width: 100%;
+    }
+
+    .time-btn {
+      border: none;
+      border-radius: 12px;
+      padding: 18px 10px;
+      font-size: 15px;
+      font-weight: 600;
+      letter-spacing: 1.5px;
+      cursor: pointer;
+      text-transform: uppercase;
+      transition: transform 0.12s, box-shadow 0.2s;
+      font-family: 'DM Sans', sans-serif;
+    }
+    .time-btn:active { transform: scale(0.97); }
+    .time-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+
+    .btn-in {
+      background: linear-gradient(135deg, #14532d, #16a34a);
+      color: #bbf7d0;
+    }
+    .btn-in:hover:not(:disabled) { box-shadow: 0 0 20px rgba(22,163,74,0.35); }
+
+    .btn-out {
+      background: linear-gradient(135deg, #7c2d12, #dc2626);
+      color: #fee2e2;
+    }
+    .btn-out:hover:not(:disabled) { box-shadow: 0 0 20px rgba(220,38,38,0.35); }
+
+    .btn-icon { font-size: 16px; display: block; margin-bottom: 4px; }
+
+    .spinner {
+      display: none;
+      width: 20px; height: 20px;
+      border: 2px solid rgba(255,255,255,0.1);
+      border-top-color: #8ab4e0;
+      border-radius: 50%;
+      animation: spin 0.6s linear infinite;
+      margin: 0 auto;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .status-banner {
+      width: 100%;
+      border-radius: 12px;
+      padding: 1rem 1.2rem;
+      font-size: 13px;
+      font-family: 'Share Tech Mono', monospace;
+      letter-spacing: 0.5px;
+      transition: opacity 0.5s;
+      opacity: 0;
+      pointer-events: none;
+    }
+    .status-banner.show { opacity: 1; }
+    .status-banner.success {
+      background: rgba(20,83,45,0.4);
+      border: 0.5px solid rgba(22,163,74,0.4);
+      color: #86efac;
+    }
+    .status-banner.error {
+      background: rgba(124,45,18,0.4);
+      border: 0.5px solid rgba(220,38,38,0.4);
+      color: #fca5a5;
+    }
+    .status-banner.info {
+      background: rgba(15,50,100,0.4);
+      border: 0.5px solid rgba(80,130,200,0.4);
+      color: #93c5fd;
+    }
+
+    .timelog-pop {
+      width: 100%;
+      background: rgba(10,20,50,0.85);
+      border: 0.5px solid rgba(80,130,200,0.5);
+      border-radius: 12px;
+      padding: 1rem 1.2rem;
+      opacity: 0;
+      transition: opacity 0.4s;
+    }
+    .timelog-pop.visible { opacity: 1; }
+
+    .tl-title {
+      font-size: 10px;
+      letter-spacing: 3px;
+      color: #3a5a88;
+      text-transform: uppercase;
+      margin-bottom: 0.7rem;
+    }
+
+    .tl-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr 1fr;
+      gap: 6px 4px;
+    }
+
+    .tl-col-label {
+      font-size: 10px;
+      color: #3a5a88;
+      letter-spacing: 1px;
+      padding-bottom: 4px;
+      border-bottom: 0.5px solid rgba(80,130,200,0.2);
+    }
+
+    .tl-val {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 12px;
+      color: #c0d8f5;
+    }
+    .tl-val.green { color: #86efac; font-size: 13px; }
+    .tl-val.red   { color: #fca5a5; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <button class="cfg-toggle" onclick="toggleCfg()" title="Settings">⚙</button>
+
+    <div class="logo">TimeTrack</div>
+    <div class="headline">Employee Timekeeping</div>
+
+    <div class="clock-bar">
+      <span id="live-date">—</span> &nbsp;|&nbsp; <span id="live-time">—</span>
+    </div>
+
+    <div class="cfg-panel" id="cfg-panel">
+      <label class="cfg-label">Google Apps Script Web App URL</label>
+      <div class="settings-row">
+        <input class="settings-input" id="api-url" placeholder="https://script.google.com/macros/s/.../exec" />
+        <button class="save-btn" onclick="saveUrl()">Save</button>
+      </div>
+      <p class="cfg-hint">Paste your deployed Apps Script URL above. Leave blank to run in demo mode.</p>
+    </div>
+
+    <div class="card">
+      <label class="id-label">Employee ID</label>
+      <input class="id-input" id="emp-id" type="text" placeholder="Enter ID" maxlength="12" inputmode="numeric" />
+
+      <div class="btn-row">
+        <button class="time-btn btn-in" onclick="record('IN')">
+          <span class="btn-icon">▶</span> TIME IN
+        </button>
+        <button class="time-btn btn-out" onclick="record('OUT')">
+          <span class="btn-icon">◼</span> TIME OUT
+        </button>
+      </div>
+
+      <div class="spinner" id="spinner"></div>
+    </div>
+
+    <div class="status-banner" id="status-banner"></div>
+
+    <div class="timelog-pop" id="timelog-pop">
+      <div class="tl-title">Your time log for today</div>
+      <div class="tl-grid">
+        <div class="tl-col-label">Date</div>
+        <div class="tl-col-label">Emp ID</div>
+        <div class="tl-col-label">Time In</div>
+        <div class="tl-col-label">Time Out</div>
+        <div class="tl-val" id="tl-date">—</div>
+        <div class="tl-val" id="tl-id">—</div>
+        <div class="tl-val green" id="tl-in">—</div>
+        <div class="tl-val red"   id="tl-out">—</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let apiUrl = localStorage.getItem('tt_api_url') || '';
+    let tlTimer = null;
+
+    const el = id => document.getElementById(id);
+
+    function pad(n) { return String(n).padStart(2, '0'); }
+
+    function nowParts() {
+      const d = new Date();
+      const date = `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+      const h12 = d.getHours() % 12 || 12;
+      const ampm = d.getHours() >= 12 ? 'PM' : 'AM';
+      const displayTime = `${pad(h12)}:${pad(d.getMinutes())}:${pad(d.getSeconds())} ${ampm}`;
+      const rawTime = `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+      return { date, displayTime, rawTime };
+    }
+
+    function updateClock() {
+      const { date, displayTime } = nowParts();
+      el('live-date').textContent = date;
+      el('live-time').textContent = displayTime;
+    }
+    updateClock();
+    setInterval(updateClock, 1000);
+
+    function toggleCfg() {
+      el('cfg-panel').classList.toggle('open');
+      if (el('cfg-panel').classList.contains('open')) {
+        el('api-url').value = apiUrl;
       }
     }
-    if (!found) {
-      if (type === "IN") {
-        sheet.appendRow([date, employeeId, time, ""]);
-        return ContentService
-          .createTextOutput(JSON.stringify({
-            success: true,
-            row: { date, employeeId, timeIn: time, timeOut: "" }
-          }))
-          .setMimeType(ContentService.MimeType.JSON);
-      } else {
-        return ContentService
-          .createTextOutput(JSON.stringify({ success: false, error: "No Time IN record found for today." }))
-          .setMimeType(ContentService.MimeType.JSON);
-      }
-    }
-  } catch(err) {
-    return ContentService
-      .createTextOutput(JSON.stringify({ success: false, error: err.message }))
-      .setMimeType(ContentService.MimeType.JSON);
-  } finally {
-    lock.releaseLock();
-  }
-}
 
-function doGet(e) {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const sheet = ss.getSheetByName(SHEET_NAME);
-  const { employeeId, date } = e.parameter;
-  const rows = sheet.getDataRange().getValues();
-  for (let i = 1; i < rows.length; i++) {
-    if (rows[i][0] === date && String(rows[i][1]) === String(employeeId)) {
-      return ContentService
-        .createTextOutput(JSON.stringify({
-          success: true,
-          row: { date: rows[i][0], employeeId: rows[i][1], timeIn: rows[i][2], timeOut: rows[i][3] }
-        }))
-        .setMimeType(ContentService.MimeType.JSON);
+    function saveUrl() {
+      apiUrl = el('api-url').value.trim();
+      localStorage.setItem('tt_api_url', apiUrl);
+      el('cfg-panel').classList.remove('open');
+      showStatus('Settings saved. API URL configured.', 'info');
     }
-  }
-  return ContentService
-    .createTextOutput(JSON.stringify({ success: false }))
-    .setMimeType(ContentService.MimeType.JSON);
-}
+
+    function showStatus(msg, type, duration = 3500) {
+      const b = el('status-banner');
+      b.textContent = msg;
+      b.className = `status-banner show ${type}`;
+      setTimeout(() => { b.className = 'status-banner'; }, duration);
+    }
+
+    function showTimelog(data) {
+      el('tl-date').textContent = data.date || '—';
+      el('tl-id').textContent   = data.employeeId || '—';
+      el('tl-in').textContent   = data.timeIn || '—';
+      el('tl-out').textContent  = data.timeOut || '—';
+      const pop = el('timelog-pop');
+      pop.classList.add('visible');
+      clearTimeout(tlTimer);
+      tlTimer = setTimeout(() => pop.classList.remove('visible'), 5000);
+    }
+
+    function setLoading(on) {
+      el('spinner').style.display = on ? 'block' : 'none';
+      document.querySelectorAll('.time-btn').forEach(b => b.disabled = on);
+    }
+
+    async function record(type) {
+      const empId = el('emp-id').value.trim();
+      if (!empId) {
+        showStatus('Please enter your Employee ID first.', 'error');
+        el('emp-id').focus();
+        return;
+      }
+
+      const { date, displayTime, rawTime } = nowParts();
+      setLoading(true);
+
+      if (!apiUrl) {
+        await new Promise(r => setTimeout(r, 600));
+        showStatus(`[DEMO] Time ${type} recorded at ${displayTime}`, 'success', 4500);
+        showTimelog({
+          date,
+          employeeId: empId,
+          timeIn:  type === 'IN'  ? displayTime : '08:00:00 AM',
+          timeOut: type === 'OUT' ? displayTime : ''
+        });
+        setLoading(false);
+        return;
+      }
+
+      try {
+        await fetch(apiUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ employeeId: empId, type, date, time: rawTime }),
+          mode: 'no-cors'
+        });
+        showStatus(`Time ${type} recorded at ${displayTime}`, 'success', 4500);
+        showTimelog({
+          date,
+          employeeId: empId,
+          timeIn:  type === 'IN'  ? displayTime : '(earlier)',
+          timeOut: type === 'OUT' ? displayTime : ''
+        });
+      } catch (err) {
+        showStatus('Connection error. Check your API URL in settings.', 'error');
+      }
+
+      setLoading(false);
+    }
+  </script>
+</body>
+</html>
