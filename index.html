@@ -1,0 +1,73 @@
+const SHEET_NAME = "Sheet1";
+
+function doPost(e) {
+  const lock = LockService.getScriptLock();
+  lock.tryLock(10000);
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const sheet = ss.getSheetByName(SHEET_NAME);
+    const data = JSON.parse(e.postData.contents);
+    const { employeeId, type, date, time } = data;
+
+    // Search for existing row for this employee today
+    const rows = sheet.getDataRange().getValues();
+    let found = false;
+    for (let i = 1; i < rows.length; i++) {
+      if (rows[i][0] === date && String(rows[i][1]) === String(employeeId)) {
+        if (type === "OUT") {
+          sheet.getRange(i + 1, 4).setValue(time); // Column D = Time Out
+        }
+        // Return existing row data
+        return ContentService
+          .createTextOutput(JSON.stringify({
+            success: true,
+            row: { date: rows[i][0], employeeId: rows[i][1], timeIn: rows[i][2], timeOut: sheet.getRange(i+1,4).getValue() }
+          }))
+          .setMimeType(ContentService.MimeType.JSON);
+        found = true;
+        break;
+      }
+    }
+    if (!found) {
+      if (type === "IN") {
+        sheet.appendRow([date, employeeId, time, ""]);
+        return ContentService
+          .createTextOutput(JSON.stringify({
+            success: true,
+            row: { date, employeeId, timeIn: time, timeOut: "" }
+          }))
+          .setMimeType(ContentService.MimeType.JSON);
+      } else {
+        return ContentService
+          .createTextOutput(JSON.stringify({ success: false, error: "No Time IN record found for today." }))
+          .setMimeType(ContentService.MimeType.JSON);
+      }
+    }
+  } catch(err) {
+    return ContentService
+      .createTextOutput(JSON.stringify({ success: false, error: err.message }))
+      .setMimeType(ContentService.MimeType.JSON);
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function doGet(e) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName(SHEET_NAME);
+  const { employeeId, date } = e.parameter;
+  const rows = sheet.getDataRange().getValues();
+  for (let i = 1; i < rows.length; i++) {
+    if (rows[i][0] === date && String(rows[i][1]) === String(employeeId)) {
+      return ContentService
+        .createTextOutput(JSON.stringify({
+          success: true,
+          row: { date: rows[i][0], employeeId: rows[i][1], timeIn: rows[i][2], timeOut: rows[i][3] }
+        }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+  }
+  return ContentService
+    .createTextOutput(JSON.stringify({ success: false }))
+    .setMimeType(ContentService.MimeType.JSON);
+}
