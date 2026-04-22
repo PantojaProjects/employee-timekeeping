@@ -518,6 +518,16 @@ async function loadTodayLogs() {
   }
 }
 
+// ── Short time display: "08:01 AM" from full time string ──
+function shortTime(timeVal) {
+  // timeVal may be "08:01:32 AM" or any locale string — parse and reformat
+  try {
+    var d = new Date('1970-01-01 ' + timeVal);
+    if (isNaN(d)) return timeVal; // fallback: return as-is
+    return d.toLocaleTimeString('en-PH', { hour12:true, hour:'2-digit', minute:'2-digit' });
+  } catch(e) { return timeVal; }
+}
+
 // ── Render log rows ────────────────────────────────────
 function renderLogs(logs) {
   var tbody = document.getElementById('log-body');
@@ -533,7 +543,7 @@ function renderLogs(logs) {
       '<td><strong>' + escHtml(row.empNum) + '</strong></td>' +
       '<td><span class="tag tag-' + (isIn?'in':'out') + '"><span class="dot"></span>' +
         (isIn?'Time In':'Time Out') + '</span></td>' +
-      '<td>' + escHtml(row.time) + '</td>' +
+      '<td>' + escHtml(shortTime(row.time)) + '</td>' +
       '<td>' + escHtml(row.date) + '</td>' +
       '</tr>';
   }).join('');
