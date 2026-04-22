@@ -518,14 +518,15 @@ async function loadTodayLogs() {
   }
 }
 
-// ── Short time display: "08:01 AM" from full time string ──
+// ── Short time: strip seconds from "08:01:32 AM" → "08:01 AM" ──
+// Apps Script always returns a clean "HH:MM:SS AM/PM" string.
 function shortTime(timeVal) {
-  // timeVal may be "08:01:32 AM" or any locale string — parse and reformat
-  try {
-    var d = new Date('1970-01-01 ' + timeVal);
-    if (isNaN(d)) return timeVal; // fallback: return as-is
-    return d.toLocaleTimeString('en-PH', { hour12:true, hour:'2-digit', minute:'2-digit' });
-  } catch(e) { return timeVal; }
+  if (!timeVal) return '';
+  var s = String(timeVal).trim();
+  // Match HH:MM:SS with optional AM/PM and drop the :SS part
+  var m = s.match(/^(\d{1,2}:\d{2}):\d{2}(\s*[AaPp][Mm])?$/);
+  if (m) return (m[1] + (m[2] ? ' ' + m[2].trim().toUpperCase() : '')).trim();
+  return s;
 }
 
 // ── Render log rows ────────────────────────────────────
